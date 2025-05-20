@@ -1,88 +1,231 @@
-const int pinRojo = 23;
-const int pinVer = 22;
-const int pinAzu = 1;
+#define MOTOR_PIN_00 13        // Motor conectado al pin 13
+#define MOTOR_PIN_01 12  
+#define MOTOR_PIN_02 14
+#define MOTOR_PIN_03 27
+#define MOTOR_PIN_04 26
+#define MOTOR_PIN_05 25
 
-const int pinSensorTrig = 3; // Trigger pin of the proximity sensor
-const int pinSensorEcho = 21; // Echo pin of the proximity sensor
-const int pinSensorTrig2 = 19; // Trigger pin of the second proximity sensor
-const int pinSensorEcho2 = 18; // Echo pin of the second proximity sensor
+#define DISTANCIA_INFRA 36  
 
-#define ROLLING_AVG_SIZE 5
+#define TRIG_PIN 23 // ESP32 pin GPIO23 connected to Ultrasonic Sensor's TRIG pin
+#define ECHO_PIN 22 // ESP32 pin GPIO22 connected to Ultrasonic Sensor's ECHO pin
 
-int distanceReadings[ROLLING_AVG_SIZE] = {0};
-int currentIndex = 0;
+float duration_us, distance_cm;
+float distance_old;
+float counter;
 
-long duration;
-int distance;
+//// Control de los tiempos
+unsigned long previousMillisEscena = 0;
+unsigned long previousMillisSensor = 0;
+unsigned long interval = 50; // Interval for updating brightness (milliseconds)
+
+//// Setup de la potencia inicial
+float potencia = 0;
+
 
 void setup() {
-  pinMode(pinRojo, OUTPUT);
-  pinMode(pinVer, OUTPUT);
-  pinMode(pinAzu, OUTPUT);
-  pinMode(pinSensorTrig, OUTPUT);
-  pinMode(pinSensorEcho, INPUT);
-  pinMode(pinSensorTrig2, OUTPUT);
-  pinMode(pinSensorEcho2, INPUT);
-  distance = 0;
+  distance_old = 0.0;
+  counter = 0.0;
+ // Inicializar comunicación Serial
+  Serial.begin(115200);
+  delay(3000); // Esperar a que se estabilice la comunicación serial
+  Serial.println("Iniciando programa de prueba del sensor SHARP");
+  Serial.println("---------------------------------------------");
+
+// configure the trigger pin to output mode
+  pinMode(TRIG_PIN, OUTPUT);
+  // configure the echo pin to input mode
+  pinMode(ECHO_PIN, INPUT);
+  
+  // Configurar el pin como salida
+  pinMode(MOTOR_PIN_00, OUTPUT);
+  pinMode(MOTOR_PIN_01, OUTPUT);
+  pinMode(MOTOR_PIN_02, OUTPUT);
+  pinMode(MOTOR_PIN_03, OUTPUT);
+  pinMode(MOTOR_PIN_04, OUTPUT);
+  pinMode(MOTOR_PIN_05, OUTPUT);
+  
+  // Inicialmente motor apagado
+  analogWrite(MOTOR_PIN_00, 0);
+  analogWrite(MOTOR_PIN_01, 0);
+  analogWrite(MOTOR_PIN_02, 0);
+  analogWrite(MOTOR_PIN_03, 0);
+  analogWrite(MOTOR_PIN_04, 0);
+  analogWrite(MOTOR_PIN_05, 0);
 }
 
 void loop() {
-  // Send a 10-microsecond pulse to the first trigger pin
-  digitalWrite(pinSensorTrig, LOW);
-  delayMicroseconds(2);
-  digitalWrite(pinSensorTrig, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(pinSensorTrig, LOW);
 
-  // Measure the duration of the echo pulse for the first sensor
-  long duration1 = pulseIn(pinSensorEcho, HIGH);
+  sensar();
+  escena1();
 
-  // Send a 10-microsecond pulse to the second trigger pin
-  digitalWrite(pinSensorTrig2, LOW);
-  delayMicroseconds(2);
-  digitalWrite(pinSensorTrig2, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(pinSensorTrig2, LOW);
+  counter += 1;
+  delay(25);
+}
 
-  // Measure the duration of the echo pulse for the second sensor
-  long duration2 = pulseIn(pinSensorEcho2, HIGH);
+void sensar() {
+  float intervalo_sensado = 100;
+  unsigned long currentMillis = millis();
+  if (currentMillis - previousMillisSensor >= intervalo_sensado) {
+    previousMillisSensor = currentMillis;
+    // SENSORES DISTANCIA
+    // int lecturaADC = analogRead(DISTANCIA_INFRA);
+    // Serial.println((int)lecturaADC);
 
-  // Convert the durations to distances (in cm)
-  int distance1 = duration1 * 0.034 / 2;
-  int distance2 = duration2 * 0.034 / 2;
+    // generate 10-microsecond pulse to TRIG pin
+    digitalWrite(TRIG_PIN, HIGH);
+    delayMicroseconds(10);
+    digitalWrite(TRIG_PIN, LOW);
 
-  // Average the distances from both sensors
-  int currentDistance = (distance1 + distance2) / 2;
+    // measure duration of pulse from ECHO pin
+    duration_us = pulseIn(ECHO_PIN, HIGH);
 
-  // Update the rolling average array
-  distanceReadings[currentIndex] = currentDistance;
-  currentIndex = (currentIndex + 1) % ROLLING_AVG_SIZE;
 
-  // Calculate the rolling average
-  int rollingSum = 0;
-  for (int i = 0; i < ROLLING_AVG_SIZE; i++) {
-    rollingSum += distanceReadings[i];
+
+    // Serial.print("duration_us: ");
+    // Serial.println(duration_us);
+
+    // // calculate the distance
+    distance_cm = 0.017 * duration_us;
+    distance_old = distance_old * 0.8 + distance_cm * 0.2;
+
+    // // print the value to Serial Monitor
+    // Serial.print("distance: ");
+    // Serial.print(distance_old);
+    // Serial.println(" cm");
   }
-  distance = rollingSum / ROLLING_AVG_SIZE;
+}
 
-  // Determine which LED to light up based on distance thresholds
-  if (distance <= 45) { // Close
-    digitalWrite(pinRojo, HIGH);
-    digitalWrite(pinVer, LOW);
-    digitalWrite(pinAzu, LOW);
-  } else if (distance > 45 && distance <= 120) { // Near
-    digitalWrite(pinRojo, LOW);
-    digitalWrite(pinVer, HIGH);
-    digitalWrite(pinAzu, LOW);
-  } else if (distance > 120 && distance <= 375) { // Far away
-    digitalWrite(pinRojo, LOW);
-    digitalWrite(pinVer, LOW);
-    digitalWrite(pinAzu, HIGH);
-  } else { // Very far (more than 375 cm)
-    digitalWrite(pinRojo, HIGH);
-    digitalWrite(pinVer, HIGH);
-    digitalWrite(pinAzu, HIGH);
+void escena1() {
+  unsigned long currentMillis = millis();
+  
+  if (currentMillis - previousMillisEscena >= interval) {
+    previousMillisEscena = currentMillis;
+    // Serial.println(counter);
+
+    float divisor = (distance_old);
+    float potenciaExtra = 70 - distance_old;
+    Serial.println(divisor);
+
+    // Calcular el brillo de la luz basado en una sinusoide
+    float sineWave = (
+      sin(
+        counter/divisor
+        ) + 1.0
+    ) / 2.0; // Scaled to 0-1 range
+    potencia = int(sineWave * 128 + sineWave * potenciaExtra);
+    // int redBrightness = int(sineWave * 255);
+    // int greenBrightness = int(sineWave * 255 * 0.7); // Slightly less green for a warmer yellow
+    // int blueBrightness = int(sineWave * 255 * 0.1);
+
+    // Establecer el color de la luz
+    setTodos(potencia);
+
+    // Incrementar el brillo para la siguiente iteración
+    // float fadeAmount = 0.1;
+    // potencia += fadeAmount;
+
+    // Reiniciar el ciclo si se alcanza el máximo
+    // if (potencia > TWO_PI) {
+    //   potencia = 0;
+    // }
+
+    Serial.print("potencia: ");
+    Serial.println(potencia);
   }
+}
 
-  delay(50); // Small delay for stability
+// void escena2() {
+//   if distancia <= 60.0 && distancia >= 30 {
+//     setTodos(128);
+//   }
+// }
+
+void setTodos(int potencia) {
+  analogWrite(MOTOR_PIN_00, potencia);  // ~25% de potencia
+  analogWrite(MOTOR_PIN_01, potencia);
+  analogWrite(MOTOR_PIN_02, potencia);
+  analogWrite(MOTOR_PIN_03, potencia);
+  analogWrite(MOTOR_PIN_04, potencia);
+  analogWrite(MOTOR_PIN_05, potencia);
+}
+
+void demo1() {
+  // Demostración 1: Velocidad baja
+  // Serial.println("Velocidad baja");
+  analogWrite(MOTOR_PIN_00, 64);  // ~25% de potencia
+  analogWrite(MOTOR_PIN_01, 64);
+  analogWrite(MOTOR_PIN_02, 64);
+  analogWrite(MOTOR_PIN_03, 64);
+  analogWrite(MOTOR_PIN_04, 64);
+  analogWrite(MOTOR_PIN_05, 64);
+  delay(2000);
+}
+
+void demo2() {
+  // Demostración 2: Velocidad media
+  // Serial.println("Velocidad media");
+  analogWrite(MOTOR_PIN_00, 128); // 50% de potencia
+  analogWrite(MOTOR_PIN_01, 128);
+  analogWrite(MOTOR_PIN_02, 128);
+  analogWrite(MOTOR_PIN_03, 128);
+  analogWrite(MOTOR_PIN_04, 128);
+  analogWrite(MOTOR_PIN_05, 128);
+  delay(2000);
+}
+
+void demo3() {
+  // Demostración 3: Velocidad alta
+  // Serial.println("Velocidad alta");
+  analogWrite(MOTOR_PIN_00, 255); // 100% de potencia
+  analogWrite(MOTOR_PIN_01, 255);
+  analogWrite(MOTOR_PIN_02, 255);
+  analogWrite(MOTOR_PIN_03, 255);
+  analogWrite(MOTOR_PIN_04, 255);
+  analogWrite(MOTOR_PIN_05, 255);
+  delay(2000);
+}
+
+void demo4() {
+  // Demostración 4: Motor apagado
+  // Serial.println("Motor apagado");
+  analogWrite(MOTOR_PIN_00, 0);   // 0% - apagado
+  analogWrite(MOTOR_PIN_01, 0);
+  analogWrite(MOTOR_PIN_02, 0);
+  analogWrite(MOTOR_PIN_03, 0);
+  analogWrite(MOTOR_PIN_04, 0);
+  analogWrite(MOTOR_PIN_05, 0);
+  delay(2000);
+}
+
+void demo5() {
+  // Demostración 5: Incremento gradual
+  // Serial.println("Incrementando velocidad...");
+  for(int i = 0; i <= 255; i += 5) {
+    analogWrite(MOTOR_PIN_00, i);
+    analogWrite(MOTOR_PIN_01, i);
+    analogWrite(MOTOR_PIN_02, i);
+    analogWrite(MOTOR_PIN_03, i);
+    analogWrite(MOTOR_PIN_04, i);
+    analogWrite(MOTOR_PIN_05, i);
+    // Serial.print("Velocidad: ");
+    // Serial.println(i);
+    delay(100);
+  }
+}
+
+void demo6() {
+  // Demostración 6: Decremento gradual
+  // Serial.println("Disminuyendo velocidad...");
+  for(int i = 255; i >= 0; i -= 5) {
+    analogWrite(MOTOR_PIN_00, i);
+    analogWrite(MOTOR_PIN_01, i);
+    analogWrite(MOTOR_PIN_02, i);
+    analogWrite(MOTOR_PIN_03, i);
+    analogWrite(MOTOR_PIN_04, i);
+    analogWrite(MOTOR_PIN_05, i);
+    // Serial.print("Velocidad: ");
+    // Serial.println(i);
+    delay(100);
+  }
 }
